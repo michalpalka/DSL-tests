@@ -68,5 +68,12 @@ toBackEnd l = case l of
   toBackEnd2 c m n = c <$> toBackEnd m <*> toBackEnd n
 
 
-test1 = case fmap (normalise False) $ translate  $ myApply  myTest [|| 7 ||] of
-  Rgt e -> e
+test1 = myApply myTest [|| 7 ||]
+
+myNorm ex =
+  case fmap (normalise False) $ translate ex
+  of Rgt e -> e
+
+runExample ex =
+  runNameMonad $ toBackEnd $ myNorm ex
+
