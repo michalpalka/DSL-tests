@@ -68,12 +68,21 @@ toBackEnd l = case l of
   toBackEnd2 c m n = c <$> toBackEnd m <*> toBackEnd n
 
 
+test1 :: Qt Float
 test1 = myApply myTest [|| 7 ||]
 
+-- The type signatures require more imports
+--myNorm
+--  :: QHaskell.Singleton.HasSin QHaskell.Type.GADT.Typ a =>
+--     Qt a -> TestLang a
 myNorm ex =
   case fmap (normalise False) $ translate ex
   of Rgt e -> e
 
+--runExample
+--  :: QHaskell.Singleton.HasSin QHaskell.Type.GADT.Typ a =>
+--     Qt a -> TExp
 runExample ex =
   runNameMonad $ toBackEnd $ myNorm ex
 
+-- run: runExample test1
