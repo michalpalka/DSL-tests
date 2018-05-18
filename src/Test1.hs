@@ -86,3 +86,5 @@ runExample ex =
   runNameMonad $ toBackEnd $ myNorm ex
 
 -- run: runExample test1
+
+hello = [|| 7 `plus` 4 :: Float ||]
