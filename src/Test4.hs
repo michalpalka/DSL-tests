@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DataKinds, FlexibleContexts, PatternSynonyms #-}
+{-# LANGUAGE TemplateHaskell, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds #-}
 module Test4 where
 
 import Data.List (find)
@@ -66,13 +66,17 @@ evalMapping (Mapping l m) (FVInt i) =
     Just (_, lab) -> Just $ LF lab FVNone
     Nothing       ->
       case m of
-        Just lab -> Just $ LF lab (FVInt i) -- We have a catch-all clause
+        -- We have a catch-all clause
+        Just lab -> Just $ LF lab (FVInt i)
         Nothing  -> Nothing -- Invalid data value
 evalMapping (Mapping _ m) (FVFloat f) =
   case m of
-    Just lab -> Just $ LF lab (FVFloat f) -- We have a catch-all clause
+    -- We have a catch-all clause
+    Just lab -> Just $ LF lab (FVFloat f)
     Nothing  -> Nothing -- Invalid data value
 
+-- Reimplement evalMapping using low-level conditionals
+--
 
 
 
@@ -109,7 +113,16 @@ eduMapQ =
 intEq :: Word32 -> Word32 -> Bool
 intEq = (==)
 
-makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq]
+maybe2 :: Word32 -> (Word32 -> Word32) -> Maybe Word32 -> Word32
+maybe2 = maybe
+
+just :: Word32 -> Maybe Word32
+just = Just
+
+nothing :: Maybe Word32
+nothing = Nothing
+
+makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq, 'maybe2, 'just, 'nothing]
 
 
 pattern PlusVar   m n = Prm Zro (Ext m (Ext n Emp))
@@ -213,3 +226,5 @@ hello = [|| 7 *** 4 :: Float ||]
 
 test2 = [|| \x -> x `plus` 3 ||]
 test3 = [|| \x -> if (x :: Word32) `intEq` 0 then (1 :: Word32) else 2 ||]
+
+test4 = [|| \x -> maybe2 5 (\x -> x) (if (x :: Word32) `intEq` 0 then just (1 :: Word32) else nothing) ||]
