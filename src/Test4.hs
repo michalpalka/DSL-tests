@@ -125,9 +125,12 @@ nothing = Nothing
 makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq, 'maybe2, 'just, 'nothing]
 
 
-pattern PlusVar   m n = Prm Zro (Ext m (Ext n Emp))
-pattern MulVar    m n = Prm (Suc Zro) (Ext m (Ext n Emp))
-pattern IEqVar    m n = Prm (Suc (Suc (Suc Zro))) (Ext m (Ext n Emp))
+pattern PlusVar   m n   = Prm Zro (Ext m (Ext n Emp))
+pattern MulVar    m n   = Prm (Suc Zro) (Ext m (Ext n Emp))
+pattern IEqVar    m n   = Prm (Suc (Suc (Suc Zro))) (Ext m (Ext n Emp))
+pattern Maybe2Var m n p = Prm (Suc (Suc (Suc (Suc Zro)))) (Ext m (Ext n (Ext p Emp)))
+pattern JustVar   m     = Prm (Suc (Suc (Suc (Suc (Suc Zro))))) (Ext m Emp)
+pattern NthVar          = Prm (Suc (Suc (Suc (Suc (Suc (Suc Zro)))))) Emp
 
 testLang :: Qt Float -> ErrM Float
 testLang q = do d <- translate q
@@ -160,8 +163,6 @@ data TExp =
   | Mul   TExp TExp
   | Eq    TExp TExp
   deriving (Eq, Show)
-
-
 
 type NameMonad a = State Word32 a
 
@@ -197,10 +198,15 @@ toBackEnd l = case l of
     x <- newVar
     m' <- toBackEnd $ substitute (Int x) m
     return $ Lam ("x" ++ show x) m'
+  x -> error (show x)
   where
   toBackEnd2 :: (TExp -> TExp -> TExp) ->
                  TestLang a -> TestLang b -> NameMonad TExp
   toBackEnd2 c m n = c <$> toBackEnd m <*> toBackEnd n
+  toBackEnd3 :: (TExp -> TExp -> TExp -> TExp) ->
+                 TestLang a -> TestLang b -> TestLang c -> NameMonad TExp
+  toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
+
 
 
 test1 :: Qt Float
