@@ -100,12 +100,19 @@ eduMapQ =
 --while :: HasSin Typ s =>
 --  (Rep s) -> (s -> Bool) -> (s -> s) -> s -> s
 
+-- \x -> case evalMapping (eduMapQ x) of
+--          Just _  -> 1
+--          Nothing -> 0
 
-makeQDSL "TestLang" ['plus, 'mul, '(***)]
+intEq :: Word32 -> Word32 -> Bool
+intEq = (==) 
+
+makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq]
 
 
 pattern PlusVar   m n = Prm Zro (Ext m (Ext n Emp))
 pattern MulVar    m n = Prm (Suc Zro) (Ext m (Ext n Emp))
+pattern IEqVar    m n = Prm (Suc (Suc (Suc Zro))) (Ext m (Ext n Emp))
 
 testLang :: Qt Float -> ErrM Float
 testLang q = do d <- translate q
@@ -124,16 +131,19 @@ myApply f x = [|| $$f $$x ||]
 
 data TExp =
     Lit   Float
+  | LitI  Word32
   | VarB  String
   | Fix   String TExp
   | Let   String TExp TExp
   | TVar  String
   | Lam   String TExp
+  | TCnd  TExp TExp TExp
   | Fst   TExp
   | Snd   TExp
   | Pair  TExp TExp
   | Plus  TExp TExp
   | Mul   TExp TExp
+  | Eq    TExp TExp
   deriving (Eq, Show)
 
 
@@ -152,11 +162,23 @@ runNameMonad = flip evalState 0
 
 toBackEnd :: TestLang a -> NameMonad TExp
 toBackEnd l = case l of
-  ConF     i   -> pure (Lit  i)
-  PlusVar  m n -> toBackEnd2 Plus m n
-  MulVar   m n -> toBackEnd2 Mul m n
-  Int      x   -> return $ TVar $ "x" ++ show x
-  Abs      m   -> do
+  ConF     i     -> pure (Lit  i)
+  ConI     i     -> pure (LitI i)
+  PlusVar  m n   -> toBackEnd2 Plus m n
+  MulVar   m n   -> toBackEnd2 Mul m n
+  IEqVar   m n   -> toBackEnd2 Eq m n
+  Int      x     -> return $ TVar $ "x" ++ show x
+  LeT      e b   -> do
+    x <- newVar
+    e' <- toBackEnd e
+    b' <- toBackEnd $ substitute (Int x) b
+    return $ Let ("x" ++ show x) e' b'
+  Cnd      c t e -> do
+    c' <- toBackEnd c
+    t' <- toBackEnd t
+    e' <- toBackEnd e
+    return $ TCnd c' t' e'
+  Abs      m     -> do
     x <- newVar
     m' <- toBackEnd $ substitute (Int x) m
     return $ Lam ("x" ++ show x) m'
@@ -175,7 +197,7 @@ test1 = myApply myTest [|| 7 ||]
 --     Qt a -> TestLang a
 myNorm ex =
   case fmap (normalise False) $ translate ex
-  of Rgt e -> e
+  of Rgt e -> e; e' -> error (show e')
 
 --runExample
 --  :: QHaskell.Singleton.HasSin QHaskell.Type.GADT.Typ a =>
@@ -188,4 +210,4 @@ runExample ex =
 hello = [|| 7 *** 4 :: Float ||]
 
 test2 = [|| \x -> x `plus` 3 ||]
-test3 = [|| \x -> evalMapping eduMapQ x ||]
+test3 = [|| \x -> if (x :: Word32) `intEq` 0 then (1 :: Word32) else 2 ||]
