@@ -19,15 +19,17 @@ a *** b = a * b
 
 
 
+-- concrete sytntax + abstract syntax + mapping (part of parsing)
 -- physical field + logical field + mapping
 -- Income = NoData | IData Float
 -- IncomePhy = -9 | -8 | -7 | 0 | *
 --  -9, -8, -7, 0 -> NoData; x -> IData x
+
 -- Education = NoData | HigherEd | OtherEd | NoEd
 -- EducationPhy = -9 | -8 | -6 | 1 | 2 | 3
 -- -9, -8, -6 -> NoData; 1 -> HigherEd; 2 -> OtherEd; 3 -> NoEd
 
--- 
+-- the smoking data file has 1500 attributes!
 
 data FieldT = FSum [Int] AtomT
   deriving (Eq, Show)
@@ -42,7 +44,7 @@ data Mapping = Mapping [([Int], String)] (Maybe String)
   deriving (Eq, Show)
 
 class WellFormed a where
-  wellFormed :: a -> Bool
+  wellFormed :: a -> Bool    -- not used yet (but should check if the concrete syntax is "ok" = can be mapped to some abstract syntax)
 
 incomePhy = FSum [-9, -8, -7, 0] FFloat
 
@@ -105,7 +107,7 @@ eduMapQ =
 --          Nothing -> 0
 
 intEq :: Word32 -> Word32 -> Bool
-intEq = (==) 
+intEq = (==)
 
 makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq]
 
