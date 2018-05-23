@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, GADTs, DataKinds, FlexibleContexts, PatternSynonyms #-}
 module Test4 where
 
+import Data.List (find)
 import Data.Word
 import Control.Monad.State
 
@@ -16,7 +17,92 @@ mul = (*)
 (***) :: Float -> Float -> Float
 a *** b = a * b
 
+
+
+-- physical field + logical field + mapping
+-- Income = NoData | IData Float
+-- IncomePhy = -9 | -8 | -7 | 0 | *
+--  -9, -8, -7, 0 -> NoData; x -> IData x
+-- Education = NoData | HigherEd | OtherEd | NoEd
+-- EducationPhy = -9 | -8 | -6 | 1 | 2 | 3
+-- -9, -8, -6 -> NoData; 1 -> HigherEd; 2 -> OtherEd; 3 -> NoEd
+
+-- 
+
+data FieldT = FSum [Int] AtomT
+  deriving (Eq, Show)
+
+data AtomT = FInt | FFloat | FNone
+  deriving (Eq, Show)
+
+data LFieldT = LFT [(String, AtomT)]
+  deriving (Eq, Show)
+
+data Mapping = Mapping [([Int], String)] (Maybe String)
+  deriving (Eq, Show)
+
+class WellFormed a where
+  wellFormed :: a -> Bool
+
+incomePhy = FSum [-9, -8, -7, 0] FFloat
+
+income = LFT [("NoData", FNone), ("IData", FFloat)]
+
+incomeMap = Mapping [([-9, -8, -7, 0], "NoData")] (Just "IData")
+
+data Atom = FVInt Int | FVFloat Float | FVNone
+  deriving (Eq, Show)
+
+data LField = LF String Atom
+  deriving (Eq, Show)
+
+type MapFun = Atom -> Maybe LField
+
+evalMapping :: Mapping -> MapFun
+evalMapping (Mapping l m) (FVInt i) =
+  case find (\(sp, _) -> i `elem` sp) l of
+    Just (_, lab) -> Just $ LF lab FVNone
+    Nothing       ->
+      case m of
+        Just lab -> Just $ LF lab (FVInt i) -- We have a catch-all clause
+        Nothing  -> Nothing -- Invalid data value
+evalMapping (Mapping _ m) (FVFloat f) =
+  case m of
+    Just lab -> Just $ LF lab (FVFloat f) -- We have a catch-all clause
+    Nothing  -> Nothing -- Invalid data value
+
+
+
+
+(|->) :: [Int] -> String -> ([Int], String)
+patterns |-> result = (patterns, result)
+
+defCase :: [([Int], String)] -> String -> Mapping
+defCase l d = Mapping l (Just d)
+
+noDefCase :: [([Int], String)] -> () -> Mapping
+noDefCase l d = Mapping l Nothing
+
+incomeMapQ :: Mapping
+incomeMapQ =
+  [[-9, -8, -7, 0] |-> "NoData"]
+  `defCase` "IData"
+
+eduMapQ :: Mapping
+eduMapQ =
+  [[-9, -8, -6] |-> "NoData",
+   [1]          |-> "HigherEd",
+   [2]          |-> "OtherEd",
+   [3]          |-> "NoEd"]
+  `noDefCase` ()
+
+
+--while :: HasSin Typ s =>
+--  (Rep s) -> (s -> Bool) -> (s -> s) -> s -> s
+
+
 makeQDSL "TestLang" ['plus, 'mul, '(***)]
+
 
 pattern PlusVar   m n = Prm Zro (Ext m (Ext n Emp))
 pattern MulVar    m n = Prm (Suc Zro) (Ext m (Ext n Emp))
@@ -41,53 +127,14 @@ data TExp =
   | VarB  String
   | Fix   String TExp
   | Let   String TExp TExp
+  | TVar  String
+  | Lam   String TExp
   | Fst   TExp
   | Snd   TExp
   | Pair  TExp TExp
   | Plus  TExp TExp
   | Mul   TExp TExp
   deriving (Eq, Show)
-
--- physical field + logical field + mapping
--- Income = NoData | IData Float
--- IncomePhy = -9 | -8 | -7 | 0 | *
---  -9, -8, -7, 0 -> NoData; x -> IData x
--- Education = NoData | HigherEd | OtherEd | NoEd
--- EducationPhy = -9 | -8 | -6 | 1 | 2 | 3
--- -9, -8, -6 -> NoData; 1 -> HigherEd; 2 -> OtherEd; 3 -> NoEd
-
--- 
-
-data FieldT = FSum [Int] AtomT
-  deriving (Eq, Show)
-
-data AtomT = FInt | FFloat | FNone
-  deriving (Eq, Show)
-
-data LFieldT = LFT [(String, AtomT)]
-  deriving (Eq, Show)
-
-data Mapping = Mapping [([Int], String)] (Maybe String)
-  deriving (Eq, Show)
-
-incomePhy = FSum [-9, -8, -7, 0] FFloat
-
-income = LFT [("NoData", FNone), ("IData", FFloat)]
-
-incomeMap = Mapping [([-9, -8, -7, 0], "NoData")] (Just "IData")
-
-data Atom = FVInt Int | FVFloat Float | FVNone
-  deriving (Eq, Show)
-
-data LField = LF String Atom
-  deriving (Eq, Show)
-
-type MapFun = Atom -> LField
-
-makeMapFun :: Mapping -> MapFun
-makeMapFun (Mapping l m) (FVInt i) = undefined
-  
-  
 
 
 
@@ -108,6 +155,11 @@ toBackEnd l = case l of
   ConF     i   -> pure (Lit  i)
   PlusVar  m n -> toBackEnd2 Plus m n
   MulVar   m n -> toBackEnd2 Mul m n
+  Int      x   -> return $ TVar $ "x" ++ show x
+  Abs      m   -> do
+    x <- newVar
+    m' <- toBackEnd $ substitute (Int x) m
+    return $ Lam ("x" ++ show x) m'
   where
   toBackEnd2 :: (TExp -> TExp -> TExp) ->
                  TestLang a -> TestLang b -> NameMonad TExp
@@ -134,3 +186,6 @@ runExample ex =
 -- run: runExample test1
 
 hello = [|| 7 *** 4 :: Float ||]
+
+test2 = [|| \x -> x `plus` 3 ||]
+test3 = [|| \x -> evalMapping eduMapQ x ||]
