@@ -26,10 +26,23 @@ extra-deps:
 - th-lift-instances-0.1.11
 - th-orphans-0.13.5
 - th-reify-many-0.1.8
-- transformers-compat-0.6.1.6
 - vector-0.12.0.1
 - unordered-containers-0.2.9.0
 - transformers-0.5.5.0
+- language-c-quote-0.12.2
+- mainland-pretty-0.7
+- exception-mtl-0.4.0.1
+- exception-transformers-0.4.0.6
+- haskell-src-meta-0.8.0.2
+- srcloc-0.5.1.2
+- symbol-0.2.4
+- haskell-src-exts-1.20.2
+- stm-2.4.5.0
+- transformers-compat-0.5.1.4
+- cpphs-1.20.8
+- old-locale-1.0.0.7
+- old-time-1.1.0.3
+- polyparse-1.12
 
 # Override default flag values for local packages and extra-deps
 flags:

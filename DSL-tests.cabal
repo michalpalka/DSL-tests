@@ -17,7 +17,10 @@ library
   build-depends:
       base >=4.7 && <5,
       mtl        >=2.2,
-      QHaskell
+      QHaskell,
+      language-c-quote >= 0.8,
+      mainland-pretty  >= 0.2.5        
+
   exposed-modules:
       Test1
-  default-language: Haskell2010
+  default-language: Haskell2010 
