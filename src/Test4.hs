@@ -104,7 +104,7 @@ incomeMapQ =
 
 eduMapQ :: Mapping
 eduMapQ =
-  [[-9, -8, -6] |-> "NoData",
+  [[9, 8, 6] |-> "NoData",
    [1]          |-> "HigherEd",
    [2]          |-> "OtherEd",
    [3]          |-> "NoEd"]
@@ -212,15 +212,8 @@ toBackEnd l = case l of
   toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
 
 
-data CTerm =
-    CIf (CTerm, CTerm) CTerm
-  | CInt Int
-  | CEq CTerm CTerm
-  | COr CTerm CTerm
-  | CVar String
-
-toCTerm :: Mapping -> (String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> Q (Language.Haskell.TH.Syntax.TExp Word32) -> TExp
-toCTerm (Mapping l def) f fdef =
+toTExp :: Mapping -> (String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> Q (Language.Haskell.TH.Syntax.TExp Word32) -> TExp
+toTExp (Mapping l def) f fdef =
   runExample [|| \x -> $$(mainBody l Nothing) x ||]
   where
   mainBody []               Nothing = [|| \x -> $$fdef ||]
@@ -284,4 +277,4 @@ test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1
 test5 = [|| case (Just (1 :: Word32)) of Nothing -> (5::Word32); Just x -> x ||]
 test6 = [|| Just (1 :: Word32) ||]
 
-runTest7 = toCTerm eduMapQ prop1 prop1_def
+runTest7 = toTExp eduMapQ prop1 prop1_def
