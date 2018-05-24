@@ -11,6 +11,9 @@ import qualified Language.Haskell.TH.Syntax (TExp)
 import QHaskell hiding (get)
 import QHaskell.Expression.Utils.Show.GADTFirstOrder ()
 
+import Language.C.Quote.C
+
+
 plus :: Float -> Float -> Float
 plus = (+)
 

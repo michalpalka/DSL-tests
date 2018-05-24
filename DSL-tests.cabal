@@ -19,7 +19,8 @@ library
       mtl        >=2.2,
       QHaskell,
       language-c-quote >= 0.8,
-      mainland-pretty  >= 0.2.5        
+      mainland-pretty  >= 0.2.5,
+      template-haskell >= 2.10
 
   exposed-modules:
       Test1
