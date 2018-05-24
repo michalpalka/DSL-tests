@@ -58,6 +58,8 @@ data Atom = FVInt Int | FVFloat Float | FVNone
 data LField = LF String Atom
   deriving (Eq, Show)
 
+--type MyMaybe a = (a -> b) -> b -> b
+
 type MapFun = Atom -> Maybe LField
 
 evalMapping :: Mapping -> MapFun
@@ -158,6 +160,8 @@ data TExp =
   | TCnd  TExp TExp TExp
   | Fst   TExp
   | Snd   TExp
+  | Som2  TExp
+  | Non2
   | Pair  TExp TExp
   | Plus  TExp TExp
   | Mul   TExp TExp
@@ -183,6 +187,8 @@ toBackEnd l = case l of
   PlusVar  m n   -> toBackEnd2 Plus m n
   MulVar   m n   -> toBackEnd2 Mul m n
   IEqVar   m n   -> toBackEnd2 Eq m n
+  JustVar  m     -> fmap Som2 $ toBackEnd m
+  NthVar         -> pure Non2
   Int      x     -> return $ TVar $ "x" ++ show x
   LeT      e b   -> do
     x <- newVar
@@ -233,4 +239,6 @@ hello = [|| 7 *** 4 :: Float ||]
 test2 = [|| \x -> x `plus` 3 ||]
 test3 = [|| \x -> if (x :: Word32) `intEq` 0 then (1 :: Word32) else 2 ||]
 
-test4 = [|| \x -> maybe2 5 (\x -> x) (if (x :: Word32) `intEq` 0 then just (1 :: Word32) else nothing) ||]
+test4 = [|| \x -> maybe2 5 (\y -> y) (if (x :: Word32) `intEq` 0 then just (1 :: Word32) else nothing) ||]
+
+test5 = [|| case (Just (1 :: Word32)) of Nothing -> (5::Word32); Just x -> x ||]
