@@ -5,6 +5,9 @@ import Data.List (find)
 import Data.Word
 import Control.Monad.State
 
+import Language.Haskell.TH.Syntax (Q)
+import qualified Language.Haskell.TH.Syntax (TExp)
+
 import QHaskell hiding (get)
 import QHaskell.Expression.Utils.Show.GADTFirstOrder ()
 
@@ -40,7 +43,7 @@ data AtomT = FInt | FFloat | FNone
 data LFieldT = LFT [(String, AtomT)]
   deriving (Eq, Show)
 
-data Mapping = Mapping [([Int], String)] (Maybe String)
+data Mapping = Mapping [([Word32], String)] (Maybe String)
   deriving (Eq, Show)
 
 class WellFormed a where
@@ -52,7 +55,7 @@ income = LFT [("NoData", FNone), ("IData", FFloat)]
 
 incomeMap = Mapping [([-9, -8, -7, 0], "NoData")] (Just "IData")
 
-data Atom = FVInt Int | FVFloat Float | FVNone
+data Atom = FVInt Word32 | FVFloat Float | FVNone
   deriving (Eq, Show)
 
 data LField = LF String Atom
@@ -82,13 +85,13 @@ evalMapping (Mapping _ m) (FVFloat f) =
 
 
 
-(|->) :: [Int] -> String -> ([Int], String)
+(|->) :: [Word32] -> String -> ([Word32], String)
 patterns |-> result = (patterns, result)
 
-defCase :: [([Int], String)] -> String -> Mapping
+defCase :: [([Word32], String)] -> String -> Mapping
 defCase l d = Mapping l (Just d)
 
-noDefCase :: [([Int], String)] -> () -> Mapping
+noDefCase :: [([Word32], String)] -> () -> Mapping
 noDefCase l d = Mapping l Nothing
 
 incomeMapQ :: Mapping
@@ -104,7 +107,6 @@ eduMapQ =
    [3]          |-> "NoEd"]
   `noDefCase` ()
 
-
 --while :: HasSin Typ s =>
 --  (Rep s) -> (s -> Bool) -> (s -> s) -> s -> s
 
@@ -115,24 +117,13 @@ eduMapQ =
 intEq :: Word32 -> Word32 -> Bool
 intEq = (==)
 
-maybe2 :: Word32 -> (Word32 -> Word32) -> Maybe Word32 -> Word32
-maybe2 = maybe
-
-just :: Word32 -> Maybe Word32
-just = Just
-
-nothing :: Maybe Word32
-nothing = Nothing
-
-makeQDSL "TestLang" ['plus, 'mul, '(***), 'intEq, 'maybe2, 'just, 'nothing]
+makeQDSL "TestLang" ['plus, 'mul, 'intEq, '(||)]
 
 
 pattern PlusVar   m n   = Prm Zro (Ext m (Ext n Emp))
 pattern MulVar    m n   = Prm (Suc Zro) (Ext m (Ext n Emp))
-pattern IEqVar    m n   = Prm (Suc (Suc (Suc Zro))) (Ext m (Ext n Emp))
-pattern Maybe2Var m n p = Prm (Suc (Suc (Suc (Suc Zro)))) (Ext m (Ext n (Ext p Emp)))
-pattern JustVar   m     = Prm (Suc (Suc (Suc (Suc (Suc Zro))))) (Ext m Emp)
-pattern NthVar          = Prm (Suc (Suc (Suc (Suc (Suc (Suc Zro)))))) Emp
+pattern IEqVar    m n   = Prm (Suc (Suc Zro)) (Ext m (Ext n Emp))
+pattern IOrVar    m n   = Prm (Suc (Suc (Suc Zro))) (Ext m (Ext n Emp))
 
 testLang :: Qt Float -> ErrM Float
 testLang q = do d <- translate q
@@ -162,10 +153,12 @@ data TExp =
   | Snd   TExp
   | Som2  TExp
   | Non2
+  | May2  TExp TExp TExp
   | Pair  TExp TExp
   | Plus  TExp TExp
   | Mul   TExp TExp
   | Eq    TExp TExp
+  | Or    TExp TExp
   deriving (Eq, Show)
 
 type NameMonad a = State Word32 a
@@ -187,8 +180,10 @@ toBackEnd l = case l of
   PlusVar  m n   -> toBackEnd2 Plus m n
   MulVar   m n   -> toBackEnd2 Mul m n
   IEqVar   m n   -> toBackEnd2 Eq m n
-  JustVar  m     -> fmap Som2 $ toBackEnd m
-  NthVar         -> pure Non2
+  IOrVar   m n   -> toBackEnd2 Or m n
+  Som      m     -> fmap Som2 $ toBackEnd m
+  Non            -> pure Non2
+  May      m n p -> toBackEnd3 May2 m n p
   Int      x     -> return $ TVar $ "x" ++ show x
   LeT      e b   -> do
     x <- newVar
@@ -214,6 +209,46 @@ toBackEnd l = case l of
   toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
 
 
+data CTerm =
+    CIf (CTerm, CTerm) CTerm
+  | CInt Int
+  | CEq CTerm CTerm
+  | COr CTerm CTerm
+  | CVar String
+
+toCTerm :: Mapping -> (String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> Q (Language.Haskell.TH.Syntax.TExp Word32) -> TExp
+toCTerm (Mapping l def) f fdef =
+  runExample [|| \x -> $$(mainBody l Nothing) x ||]
+  where
+  mainBody []               Nothing = [|| \x -> $$fdef ||]
+  mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f lab) else $$(mainBody xs md) x ||]
+    where
+      conds [c]    = [|| \x -> x `intEq` c ||]
+      conds (c:cs) = [|| \x -> (x `intEq` c) || ($$(conds cs) x) ||]
+
+
+prop1 :: String -> Q (Language.Haskell.TH.Syntax.TExp Word32)
+prop1 "NoData"   = [|| 0 ||]
+prop1 "HigherEd" = [|| 1 ||]
+prop1 "OtherEd"  = [|| 1 ||]
+prop1 "NoEd"     = [|| 1 ||]
+
+prop1_def :: Q (Language.Haskell.TH.Syntax.TExp Word32)
+prop1_def = [|| 0 ||]
+
+-- if (x == -9 || x == -8 || x == -6) {
+--   return 0;
+-- } if (x == 1) {
+--   return 1;
+-- } if (x == 2) {
+--   return 1
+-- } if (x -- 3) {
+--   return 1;
+-- } else {
+--   return 0;
+-- }
+
+
 
 test1 :: Qt Float
 test1 = myApply myTest [|| 7 ||]
@@ -223,7 +258,7 @@ test1 = myApply myTest [|| 7 ||]
 --  :: QHaskell.Singleton.HasSin QHaskell.Type.GADT.Typ a =>
 --     Qt a -> TestLang a
 myNorm ex =
-  case fmap (normalise False) $ translate ex
+  case fmap (normalise True) $ translate ex
   of Rgt e -> e; e' -> error (show e')
 
 --runExample
@@ -234,11 +269,16 @@ runExample ex =
 
 -- run: runExample test1
 
+myMaybe = [|| \d f m -> case m of Nothing -> d; Just x -> f x ||]
+
 hello = [|| 7 *** 4 :: Float ||]
 
 test2 = [|| \x -> x `plus` 3 ||]
 test3 = [|| \x -> if (x :: Word32) `intEq` 0 then (1 :: Word32) else 2 ||]
 
-test4 = [|| \x -> maybe2 5 (\y -> y) (if (x :: Word32) `intEq` 0 then just (1 :: Word32) else nothing) ||]
+test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1 :: Word32) else Nothing) ||]
 
 test5 = [|| case (Just (1 :: Word32)) of Nothing -> (5::Word32); Just x -> x ||]
+test6 = [|| Just (1 :: Word32) ||]
+
+runTest7 = toCTerm eduMapQ prop1 prop1_def
