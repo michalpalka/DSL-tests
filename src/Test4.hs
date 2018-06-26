@@ -169,9 +169,9 @@ instance Pretty TExp where
   pprPrec n (LitI l)        = int $ fromIntegral l
   pprPrec n (TVar l)        = text l
   pprPrec n (Lam x t)       = parensIf (n > 0) $ nest 2 $
-    text "\\" `mappend` text x <+> text "->" <+> pprPrec 0 t
+    text "\\" <> text x <+> text "->" <+> pprPrec 0 t
   pprPrec n (Let x t1 t2)   =
-    text "let" <+> text x <+> equals <+> pprPrec 0 t1 `mappend` line `mappend`
+    text "let" <+> text x <+> equals <+> pprPrec 0 t1 <> line <>
       text "in" <+> pprPrec 0 t2
   pprPrec n (TCnd t1 t2 t3) = group $
     text "if" <+> pprPrec 0 t1 <+/>
