@@ -8,8 +8,11 @@ import Control.Monad.State
 import Language.Haskell.TH.Syntax (Q)
 import qualified Language.Haskell.TH.Syntax (TExp)
 
-import QHaskell hiding (get)
+import QHaskell hiding (get, (<+>))
 import QHaskell.Expression.Utils.Show.GADTFirstOrder ()
+
+import Text.PrettyPrint.Mainland
+import Text.PrettyPrint.Mainland.Class
 
 plus :: Float -> Float -> Float
 plus = (+)
@@ -160,6 +163,26 @@ data TExp =
   | Eq    TExp TExp
   | Or    TExp TExp
   deriving (Eq, Show)
+
+instance Pretty TExp where
+  pprPrec n (Lit l)         = float l
+  pprPrec n (LitI l)        = int $ fromIntegral l
+  pprPrec n (TVar l)        = text l
+  pprPrec n (Lam x t)       = parensIf (n > 0) $
+    text "\\" `mappend` text x <+> pprPrec 0 t
+  pprPrec n (Let x t1 t2)   =
+    text "let" <+> text x <+> equals <+> pprPrec 0 t1 <+/>
+      text "in" <+> pprPrec 0 t2
+  pprPrec n (TCnd t1 t2 t3) =
+    text "if" <+> pprPrec 0 t1 <+/>
+      text "then" <+> pprPrec 0 t2 <+/>
+      text "else" <+> pprPrec 0 t3
+  pprPrec n (Eq t1 t2)      = parensIf (n > 4) $
+    pprPrec 4 t1 <+> text "==" <+> pprPrec 4 t2
+  pprPrec n (Or t1 t2)      = parensIf (n > 3) $
+    pprPrec 3 t1 <+> text "||" <+> pprPrec 3 t2
+  --pprPrec n (And t1 t2)   = parensIf (n > 2) $
+  --  pprPrec 2 t1 <+> text "&&" <+> pprPrec 2 t2
 
 type NameMonad a = State Word32 a
 
