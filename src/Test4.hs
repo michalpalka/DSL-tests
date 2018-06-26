@@ -104,7 +104,7 @@ incomeMapQ =
 
 eduMapQ :: Mapping
 eduMapQ =
-  [[9, 8, 6] |-> "NoData",
+  [[9, 8, 6]    |-> "NoData",
    [1]          |-> "HigherEd",
    [2]          |-> "OtherEd",
    [3]          |-> "NoEd"]
@@ -168,15 +168,15 @@ instance Pretty TExp where
   pprPrec n (Lit l)         = float l
   pprPrec n (LitI l)        = int $ fromIntegral l
   pprPrec n (TVar l)        = text l
-  pprPrec n (Lam x t)       = parensIf (n > 0) $
+  pprPrec n (Lam x t)       = parensIf (n > 0) $ nest 2 $
     text "\\" `mappend` text x <+> text "->" <+> pprPrec 0 t
   pprPrec n (Let x t1 t2)   =
     text "let" <+> text x <+> equals <+> pprPrec 0 t1 `mappend` line `mappend`
       text "in" <+> pprPrec 0 t2
-  pprPrec n (TCnd t1 t2 t3) =
+  pprPrec n (TCnd t1 t2 t3) = group $
     text "if" <+> pprPrec 0 t1 <+/>
-      text "then" <+> pprPrec 0 t2 <+/>
-      text "else" <+> pprPrec 0 t3
+      text "then" <+> nest 2 (pprPrec 0 t2) <+/>
+      text "else" <+> nest 2 (pprPrec 0 t3)
   pprPrec n (Eq t1 t2)      = parensIf (n > 4) $
     pprPrec 4 t1 <+> text "==" <+> pprPrec 4 t2
   pprPrec n (Or t1 t2)      = parensIf (n > 3) $
