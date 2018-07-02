@@ -367,4 +367,11 @@ test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1
 test5 = [|| case (Just (1 :: Word32)) of Nothing -> (5::Word32); Just x -> x ||]
 test6 = [|| Just (1 :: Word32) ||]
 
-runTest7 = toTExp eduMapQ prop1
+-- To pretty-print
+-- putDocLn $ ppr test7
+-- To generate C code
+-- putDocLn $ ppr $ tExpToC test7
+
+test7 = toTExp eduMapQ prop1
+
+
