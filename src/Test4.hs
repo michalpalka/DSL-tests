@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds #-}
 module Test4 where
 
 import Data.List (find)
@@ -10,9 +10,14 @@ import qualified Language.Haskell.TH.Syntax (TExp)
 
 import QHaskell hiding (get, (<+>))
 import QHaskell.Expression.Utils.Show.GADTFirstOrder ()
+import qualified QHaskell.Singleton as S
+import QHaskell.Type.GADT (Typ(Wrd, Flt, Bol))
 
 import Text.PrettyPrint.Mainland
 import Text.PrettyPrint.Mainland.Class
+
+import Language.C.Quote.C
+import qualified Language.C.Syntax as CSyntax
 
 plus :: Float -> Float -> Float
 plus = (+)
@@ -143,15 +148,23 @@ myTest = [|| \a -> mul (plus 2 1) a ||]
 myApply :: Qt (Float -> Float) -> Qt Float -> Qt Float
 myApply f x = [|| $$f $$x ||]
 
+data TType = TFloat | TWord32 | TBool
+  deriving (Eq, Show)
+
+fromTType :: TType -> CSyntax.Type
+fromTType TFloat  = [cty|float|]
+fromTType TWord32 = [cty|unsigned int|]
+fromTType TBool   = [cty|int|]
+
 data TExp =
     Lit   Float
   | LitI  Word32
   | VarB  String
   | Fix   String TExp
-  | Let   String TExp TExp
+  | Let   String TType TExp TExp
   | TVar  String
-  | Lam   String TExp
-  | TCnd  TExp TExp TExp
+  | Lam   String TType TType TExp
+  | TCnd  TType TExp TExp TExp
   | Fst   TExp
   | Snd   TExp
   | Som2  TExp
@@ -168,12 +181,12 @@ instance Pretty TExp where
   pprPrec n (Lit l)         = float l
   pprPrec n (LitI l)        = int $ fromIntegral l
   pprPrec n (TVar l)        = text l
-  pprPrec n (Lam x t)       = parensIf (n > 0) $ nest 2 $
+  pprPrec n (Lam x _ _ t)       = parensIf (n > 0) $ nest 2 $
     text "\\" <> text x <+> text "->" <+> pprPrec 0 t
-  pprPrec n (Let x t1 t2)   =
+  pprPrec n (Let x _ t1 t2)   =
     text "let" <+> text x <+> equals <+> pprPrec 0 t1 <> line <>
       text "in" <+> pprPrec 0 t2
-  pprPrec n (TCnd t1 t2 t3) = group $
+  pprPrec n (TCnd _ t1 t2 t3) = group $
     text "if" <+> pprPrec 0 t1 <+/>
       text "then" <+> nest 2 (pprPrec 0 t2) <+/>
       text "else" <+> nest 2 (pprPrec 0 t3)
@@ -196,6 +209,25 @@ newVar = do n <- get
 runNameMonad :: NameMonad a -> a
 runNameMonad = flip evalState 0
 
+-- We need this to remember the
+-- type from the let binding
+typeRep :: Type a => TestLang a -> TType
+typeRep t = case aux t of
+    Wrd -> TWord32
+    Flt -> TFloat
+    Bol -> TBool
+  where
+  aux :: Type a => TestLang a -> Typ a
+  aux _ = S.sin
+
+argTypeRep :: Type a => TestLang (a -> b) -> TType
+argTypeRep t = case aux t of
+    Wrd -> TWord32
+    Flt -> TFloat
+  where
+  aux :: Type a => TestLang (a -> b) -> Typ a
+  aux _ = S.sin
+
 toBackEnd :: TestLang a -> NameMonad TExp
 toBackEnd l = case l of
   ConF     i     -> pure (Lit  i)
@@ -212,16 +244,17 @@ toBackEnd l = case l of
     x <- newVar
     e' <- toBackEnd e
     b' <- toBackEnd $ substitute (Int x) b
-    return $ Let ("x" ++ show x) e' b'
+    return $ Let ("x" ++ show x) (typeRep e) e' b'
   Cnd      c t e -> do
     c' <- toBackEnd c
     t' <- toBackEnd t
     e' <- toBackEnd e
-    return $ TCnd c' t' e'
-  Abs      m     -> do
+    return $ TCnd (typeRep t) c' t' e'
+  a@(Abs      m) -> do
     x <- newVar
-    m' <- toBackEnd $ substitute (Int x) m
-    return $ Lam ("x" ++ show x) m'
+    let m2 = substitute (Int x) m
+    m' <- toBackEnd m2
+    return $ Lam ("x" ++ show x) (argTypeRep a) (typeRep m2) m'
   x -> error (show x)
   where
   toBackEnd2 :: (TExp -> TExp -> TExp) ->
@@ -231,26 +264,65 @@ toBackEnd l = case l of
                  TestLang a -> TestLang b -> TestLang c -> NameMonad TExp
   toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
 
-
-toTExp :: Mapping -> (String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> Q (Language.Haskell.TH.Syntax.TExp Word32) -> TExp
-toTExp (Mapping l def) f fdef =
+toTExp :: Mapping -> (Maybe String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> TExp
+toTExp (Mapping l def) f =
   runExample [|| \x -> $$(mainBody l Nothing) x ||]
   where
-  mainBody []               Nothing = [|| \x -> $$fdef ||]
-  mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f lab) else $$(mainBody xs md) x ||]
+  mainBody []               Nothing = [|| \x -> $$(f Nothing) ||]
+  mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f $ Just lab) else $$(mainBody xs md) x ||]
     where
       conds [c]    = [|| \x -> x `intEq` c ||]
       conds (c:cs) = [|| \x -> (x `intEq` c) || ($$(conds cs) x) ||]
 
+-- We return (e, decls, stms), where e is the expression containing the result
+-- of the computation (might be a variable), decls are the declarations
+-- we need to emit in the beginning, and stms are the program statements.
+tExpToC' :: TExp -> NameMonad (CSyntax.Exp, [CSyntax.InitGroup], [CSyntax.Stm])
+tExpToC' (TVar v)                  = return ([cexp|$id:v|], [], [])
+tExpToC' (LitI i)                  = return ([cexp|$uint:i|], [], [])
+tExpToC' (Eq t1 t2)                = do
+  (e1, i1, s1) <- tExpToC' t1
+  (e2, i2, s2) <- tExpToC' t2
+  return ([cexp| $exp:e1 == $exp:e2|], i1 ++ i2, s1 ++ s2)
+tExpToC' (Or t1 t2)                = do
+  (e1, i1, s1) <- tExpToC' t1
+  (e2, i2, s2) <- tExpToC' t2
+  return ([cexp| $exp:e1 || $exp:e2|], i1 ++ i2, s1 ++ s2)
+tExpToC' (Let x ttype t1 t2)       = do
+  (e1, i1, s1) <- tExpToC' t1
+  (e2, i2, s2) <- tExpToC' t2
+  return (e2, i1 ++ [[cdecl|$ty:(fromTType ttype) $id:x;|]] ++ i2, s1 ++ [cstms|$id:x = $exp:e1;|] ++ s2)
+tExpToC' (TCnd ttype t1 t2 t3)     = do
+  (e1, i1, s1) <- tExpToC' t1
+  (e2, i2, s2) <- tExpToC' t2
+  (e3, i3, s3) <- tExpToC' t3
+  v <- newVar
+  let v' = "v" ++ show v -- The other variables introduced by us start with 'x'
+  return ([cexp|$id:v'|], i1 ++ [[cdecl|$ty:(fromTType ttype) $id:(v');|]] ++ i2 ++ i3, s1 ++ [cstms|if ($exp:e1) { $stms:s2  $id:(v') = $exp:e2; } else { $stms:s3  $id:(v') = $exp:e3; } |])
+tExpToC' x                         = error $ show x
 
-prop1 :: String -> Q (Language.Haskell.TH.Syntax.TExp Word32)
-prop1 "NoData"   = [|| 0 ||]
-prop1 "HigherEd" = [|| 1 ||]
-prop1 "OtherEd"  = [|| 1 ||]
-prop1 "NoEd"     = [|| 1 ||]
+tExpToC :: TExp -> CSyntax.Func
+tExpToC (Lam v1 targ tres t1) =
+  let (e, decls, stms) = runNameMonad $ tExpToC' t1 in
+  [cfun| $ty:(fromTType tres) f($ty:(fromTType targ) $id:v1) { $decls:decls $stms:stms return $exp:e; } |]
 
-prop1_def :: Q (Language.Haskell.TH.Syntax.TExp Word32)
-prop1_def = [|| 0 ||]
+
+prop1 :: Maybe String -> Q (Language.Haskell.TH.Syntax.TExp Word32)
+prop1 = propify prop1'
+
+propify :: (Maybe String -> Bool) -> Maybe String -> Q (Language.Haskell.TH.Syntax.TExp Word32)
+propify f x = [|| $$(g $ f x) ||]
+  where
+  g True  = [|| 1 ||]
+  g False = [|| 0 ||]
+
+prop1' :: Maybe String -> Bool
+prop1' (Just "NoData")   = False
+prop1' (Just "HigherEd") = True
+prop1' (Just "OtherEd")  = True
+prop1' (Just "NoEd")     = True
+prop1' Nothing           = False
+
 
 -- if (x == -9 || x == -8 || x == -6) {
 --   return 0;
@@ -263,8 +335,6 @@ prop1_def = [|| 0 ||]
 -- } else {
 --   return 0;
 -- }
-
-
 
 test1 :: Qt Float
 test1 = myApply myTest [|| 7 ||]
@@ -297,4 +367,4 @@ test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1
 test5 = [|| case (Just (1 :: Word32)) of Nothing -> (5::Word32); Just x -> x ||]
 test6 = [|| Just (1 :: Word32) ||]
 
-runTest7 = toTExp eduMapQ prop1 prop1_def
+runTest7 = toTExp eduMapQ prop1
