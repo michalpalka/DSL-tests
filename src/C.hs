@@ -20,14 +20,10 @@ fromTType TBool   = [cty|int|]
 tExpToC' :: TExp -> NameMonad (CSyntax.Exp, [CSyntax.InitGroup], [CSyntax.Stm])
 tExpToC' (TVar v)                  = return ([cexp|$id:v|], [], [])
 tExpToC' (LitI i)                  = return ([cexp|$uint:i|], [], [])
-tExpToC' (Eq t1 t2)                = do
-  (e1, i1, s1) <- tExpToC' t1
-  (e2, i2, s2) <- tExpToC' t2
-  return ([cexp| $exp:e1 == $exp:e2|], i1 ++ i2, s1 ++ s2)
-tExpToC' (Or t1 t2)                = do
-  (e1, i1, s1) <- tExpToC' t1
-  (e2, i2, s2) <- tExpToC' t2
-  return ([cexp| $exp:e1 || $exp:e2|], i1 ++ i2, s1 ++ s2)
+tExpToC' (Eq t1 t2)                =
+  tExpToCOp2 (\e1 e2 -> [cexp| $exp:e1 == $exp:e2|]) t1 t2
+tExpToC' (Or t1 t2)                =
+  tExpToCOp2 (\e1 e2 -> [cexp| $exp:e1 || $exp:e2|]) t1 t2
 tExpToC' (Let x ttype t1 t2)       = do
   (e1, i1, s1) <- tExpToC' t1
   (e2, i2, s2) <- tExpToC' t2
@@ -45,6 +41,12 @@ tExpToC' (TCnd ttype t1 t2 t3)     = do
           s1 ++ [cstms|if ($exp:e1) { $stms:s2 $id:(v') = $exp:e2; }
                        else { $stms:s3 $id:(v') = $exp:e3; } |])
 tExpToC' x                         = error $ show x
+
+-- Code generation for binary operators
+tExpToCOp2 op t1 t2 = do
+  (e1, i1, s1) <- tExpToC' t1
+  (e2, i2, s2) <- tExpToC' t2
+  return (op e1 e2, i1 ++ i2, s1 ++ s2)
 
 tExpToC :: TExp -> CSyntax.Func
 tExpToC (Lam v1 targ tres t1) =
