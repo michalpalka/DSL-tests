@@ -35,7 +35,9 @@ tExpToC' (TCnd ttype t1 t2 t3)     = do
   (e2, i2, s2) <- tExpToC' t2
   (e3, i3, s3) <- tExpToC' t3
   v <- newVar
-  let v' = "v" ++ show v -- The other variables introduced by us start with 'x'
+  let v' = "v" ++ show v -- We introduce a variable to hold the result of the
+                         -- if statement.
+                         -- The other variables introduced by us start with 'x'.
   return ([cexp|$id:v'|],
           i1 ++ [[cdecl|$ty:(fromTType ttype) $id:(v');|]] ++ i2 ++ i3,
           s1 ++ [cstms|if ($exp:e1) { $stms:s2 $id:(v') = $exp:e2; }
