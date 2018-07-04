@@ -255,7 +255,7 @@ propify f x = [|| $$(g $ f x) ||]
 --  :: QHaskell.Singleton.HasSin QHaskell.Type.GADT.Typ a =>
 --     Qt a -> DSLD a
 myNorm ex =
-  case fmap (normalise True) $ translate ex
+  case fmap (normalise False) $ translate ex
   of Rgt e -> e; e' -> error (show e')
 
 --runExample
