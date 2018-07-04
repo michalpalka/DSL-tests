@@ -30,7 +30,7 @@ a *** b = a * b
 -- physical field + logical field + mapping
 -- Income = NoData | IData Float
 -- IncomePhy = -9 | -8 | -7 | 0 | *
---  -9, -8, -7, 0 -> NoData; x -> IData x
+-- -9, -8, -7, 0 -> NoData; x -> IData x
 
 -- Education = NoData | HigherEd | OtherEd | NoEd
 -- EducationPhy = -9 | -8 | -6 | 1 | 2 | 3
@@ -38,15 +38,18 @@ a *** b = a * b
 
 -- the smoking data file has 1500 attributes!
 
+-- Type of physical fields (not used for anything ATM)
 data FieldT = FSum [Int] AtomT
   deriving (Eq, Show)
 
 data AtomT = FInt | FFloat | FNone
   deriving (Eq, Show)
 
+-- Type of logical fields (not used for anything ATM)
 data LFieldT = LFT [(String, AtomT)]
   deriving (Eq, Show)
 
+-- Mapping between a physical field and a logical field
 data Mapping = Mapping [([Word32], String)] (Maybe String)
   deriving (Eq, Show)
 
@@ -55,10 +58,13 @@ data Mapping = Mapping [([Word32], String)] (Maybe String)
 class WellFormed a where
   wellFormed :: a -> Bool
 
+incomePhy :: FieldT
 incomePhy = FSum [-9, -8, -7, 0] FFloat
 
+income :: LFieldT
 income = LFT [("NoData", FNone), ("IData", FFloat)]
 
+incomeMap :: Mapping
 incomeMap = Mapping [([-9, -8, -7, 0], "NoData")] (Just "IData")
 
 data Atom = FVInt Word32 | FVFloat Float | FVNone
@@ -69,6 +75,7 @@ data LField = LF String Atom
 
 type MapFun = Atom -> Maybe LField
 
+-- Not used for code generations
 evalMapping :: Mapping -> MapFun
 evalMapping (Mapping l m) (FVInt i) =
   case find (\(sp, _) -> i `elem` sp) l of
@@ -256,5 +263,10 @@ myNorm ex =
 --     Qt a -> TExp
 runExample ex =
   runNameMonad $ toBackEnd $ myNorm ex
+
+myMaybe = [|| \d f m -> case m of Nothing -> d; Just x -> f x ||]
+test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1 :: Word32) else Nothing) ||]
+-- *** Exception: Lft "Scope Error: cannot find 'find'"
+test5 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then (find (\x -> x < 2) [2, 1::Word32]) else Nothing) ||]
 
 
