@@ -226,12 +226,13 @@ toBackEnd l = case l of
                  DSLD a -> DSLD b -> DSLD c -> NameMonad TExp
   toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
 
-toTExp :: Mapping -> (Maybe String -> Q (Language.Haskell.TH.Syntax.TExp Word32)) -> TExp
+toTExp :: Mapping -> (Maybe String -> Bool) -> TExp
 toTExp (Mapping l def) f =
   runExample [|| \x -> $$(mainBody l Nothing) x ||]
   where
-  mainBody []               Nothing = [|| \x -> $$(f Nothing) ||]
-  mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f $ Just lab) else $$(mainBody xs md) x ||]
+  f' = propify f
+  mainBody []               Nothing = [|| \x -> $$(f' Nothing) ||]
+  mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f' $ Just lab) else $$(mainBody xs md) x ||]
     where
       conds [c]    = [|| \x -> x `intEq` c ||]
       conds (c:cs) = [|| \x -> (x `intEq` c) || ($$(conds cs) x) ||]
