@@ -12,6 +12,19 @@ import Text.PrettyPrint.Mainland.Class
 import DSLD
 import C
 
+incomeMapQ :: Mapping
+incomeMapQ =
+  [[-9, -8, -7, 0] |-> "NoData"]
+  `defCase` "IData"
+
+eduMapQ :: Mapping
+eduMapQ =
+  [[9, 8, 6]    |-> "NoData",
+   [1]          |-> "HigherEd",
+   [2]          |-> "OtherEd",
+   [3]          |-> "NoEd"]
+  `noDefCase` ()
+
 prop1 :: Maybe String -> Bool
 prop1 (Just "NoData")   = False
 prop1 (Just "HigherEd") = True
@@ -19,11 +32,11 @@ prop1 (Just "OtherEd")  = True
 prop1 (Just "NoEd")     = True
 prop1 Nothing           = False
 
--- To pretty-print
--- putDocLn $ ppr test1
--- To generate C code
--- putDocLn $ ppr $ tExpToC test1
 
 test1 = toTExp eduMapQ prop1
 
+-- To pretty-print
+test2 = putDocLn $ ppr test1
 
+-- To generate C code
+test3 = putDocLn $ ppr $ tExpToC test1

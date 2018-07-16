@@ -107,18 +107,6 @@ defCase l d = Mapping l (Just d)
 noDefCase :: [([Word32], String)] -> () -> Mapping
 noDefCase l d = Mapping l Nothing
 
-incomeMapQ :: Mapping
-incomeMapQ =
-  [[-9, -8, -7, 0] |-> "NoData"]
-  `defCase` "IData"
-
-eduMapQ :: Mapping
-eduMapQ =
-  [[9, 8, 6]    |-> "NoData",
-   [1]          |-> "HigherEd",
-   [2]          |-> "OtherEd",
-   [3]          |-> "NoEd"]
-  `noDefCase` ()
 
 intEq :: Word32 -> Word32 -> Bool
 intEq = (==)
