@@ -105,9 +105,13 @@ evalMapping (Mapping _ m) (FVFloat f) =
 (|->) :: [Word32] -> String -> ([Word32], String)
 patterns |-> result = (patterns, result)
 
+-- Values that are not covered by special cases
+-- are labeled with s
 defCase :: [([Word32], String)] -> String -> Mapping
 defCase l d = Mapping l (Just d)
 
+-- Values that are not covered by special cases
+-- are illegal
 noDefCase :: [([Word32], String)] -> () -> Mapping
 noDefCase l d = Mapping l Nothing
 
