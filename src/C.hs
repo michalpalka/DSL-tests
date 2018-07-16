@@ -80,14 +80,14 @@ cSVCallback2 = [cfun|
 
 -- We adhere to the convention that the free variable
 -- of the property block is called "x1"
-cSVCallbackProp1 :: [(Int, CSyntax.Exp)] -> CSyntax.Func
+cSVCallbackProp1 :: [(Int, CSyntax.Stm)] -> CSyntax.Func
 cSVCallbackProp1 fields = [cfun|
   void cbp1(void* field, typename size_t size, void* data) {
-    typename statet* st = (typename statet*) data;
+    struct statet* st = (struct statet*) data;
     if (st->errmsg != 0) {
-      int fn = st->x++;
+      int fn = st->i++;
       char* errmsg = 0;
-      int r = parse_int((char*)field, &errmsg);
+      int x1 = parse_int((char*)field, &errmsg);
       if(errmsg != 0) {
         st->errmsg = errmsg;
       }
@@ -96,7 +96,7 @@ cSVCallbackProp1 fields = [cfun|
       }
     }
   } |]
-  where cases = [[cstm| case $int:fn': return $exp:ffun; |] | (fn', ffun) <- fields]
+  where cases = [[cstm| case $int:fn': $stm:ffun |] | (fn', ffun) <- fields]
 
 parseInt :: CSyntax.Func
 parseInt = [cfun|
@@ -124,7 +124,7 @@ parseInt = [cfun|
 cSVCallbackProp2 :: CSyntax.Func
 cSVCallbackProp2 = [cfun|
   void cb2(int c, void* data) {
-    typename statet* st = (typename statet*) data;
+    struct statet* st = (struct statet*) data;
     statet->i= 0;
     statet->j++;
   } |]
@@ -196,6 +196,18 @@ mainReadCSV = [cunit|
   $func:cSVCallback2
   $func:readCSV
   $func:readCSVCount
+  |]
+
+
+mainReadCSVProp :: [(Int, CSyntax.Stm)] -> [CSyntax.Definition]
+mainReadCSVProp l = [cunit|
+  $edecls:(includes ["errno.h", "limits.h", "csv.h"])
+  $ty:cSVProcessType;
+  $func:parseInt
+  $func:(cSVCallbackProp1 l)
+  $func:cSVCallbackProp2
+  $func:readCSV
+  $func:readCSVProcess
   |]
 
 
