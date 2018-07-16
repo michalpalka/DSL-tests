@@ -54,6 +54,10 @@ data LFieldT = LFT [(String, AtomT)]
   deriving (Eq, Show)
 
 -- Mapping between a physical field and a logical field
+-- The first component defines the special values.
+-- The second component defines whether any other value is legal.
+-- If the second components is Just s, a value that is not special
+-- becomes labelled with s.
 data Mapping = Mapping [([Word32], String)] (Maybe String)
   deriving (Eq, Show)
 
