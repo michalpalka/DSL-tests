@@ -3,6 +3,7 @@ module DSLD where
 
 import Data.List (find)
 import Data.Word
+import Data.Monoid
 
 import Language.Haskell.TH.Syntax (Q)
 import qualified Language.Haskell.TH.Syntax (TExp)
