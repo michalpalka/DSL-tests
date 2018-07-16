@@ -71,7 +71,12 @@ cSVCallback1 = [cfun|
     ((int*) data)[0]++;
   } |]
 
--- switch on field counter
+cSVCallback2 :: CSyntax.Func
+cSVCallback2 = [cfun|
+  void cb2(int c, void* data) {
+    ((int*) data)[0] = 0;
+    ((int*) data)[1]++;
+  } |]
 
 -- We adhere to the convention that the free variable
 -- of the property block is called "x1"
@@ -116,11 +121,12 @@ parseInt = [cfun|
     return (int) l;
   } |]
 
-cSVCallback2 :: CSyntax.Func
-cSVCallback2 = [cfun|
+cSVCallbackProp2 :: CSyntax.Func
+cSVCallbackProp2 = [cfun|
   void cb2(int c, void* data) {
-    ((int*) data)[0] = 0;
-    ((int*) data)[1]++;
+    typename statet* st = (typename statet*) data;
+    statet->i= 0;
+    statet->j++;
   } |]
 
 cSVCountState :: CSyntax.InitGroup
@@ -181,6 +187,8 @@ readCSVProcess = [cfun|
     return 0;
   } |]
 
+-- The generated code requires the libcsv library
+-- https://github.com/rgamble/libcsv
 mainReadCSV :: [CSyntax.Definition]
 mainReadCSV = [cunit|
   $edecls:(includes ["csv.h"])
