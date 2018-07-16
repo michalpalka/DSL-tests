@@ -9,6 +9,8 @@ import qualified Language.Haskell.TH.Syntax (TExp)
 import Text.PrettyPrint.Mainland
 import Text.PrettyPrint.Mainland.Class
 
+import System.IO
+
 import DSLD
 import C
 
@@ -40,3 +42,8 @@ test2 = putDocLn $ ppr test1
 
 -- To generate C code
 test3 = putDocLn $ ppr $ tExpToC test1
+
+genMain = do
+  withFile "test2.c" WriteMode $ \h -> do
+    hPutDocLn h $ ppr mainReadCSV
+

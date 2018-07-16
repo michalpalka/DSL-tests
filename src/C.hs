@@ -56,5 +56,138 @@ tExpToC (Lam v1 targ tres t1) =
   [cfun| $ty:(fromTType tres) f($ty:(fromTType targ) $id:v1)
             { $decls:decls $stms:stms return $exp:e; } |]
 
+tExpToCBlock :: TExp -> CSyntax.Stm
+tExpToCBlock (Lam v1 targ tres t1) =
+  let (e, decls, stms) = runNameMonad $ tExpToC' t1 in
+  [cstm| { $decls:decls $stms:stms return $exp:e; } |]
+
+-- Create a list of includes
+includes :: [String] -> [CSyntax.Definition]
+includes is = [ [cedecl| $esc:("#include <" ++ i ++ ">") |] | i <- is ]
+
+cSVCallback1 :: CSyntax.Func
+cSVCallback1 = [cfun|
+  void cb1(void* field, typename size_t size, void* data) {
+    ((int*) data)[0]++;
+  } |]
+
+-- switch on field counter
+
+-- We adhere to the convention that the free variable
+-- of the property block is called "x1"
+cSVCallbackProp1 :: [(Int, CSyntax.Exp)] -> CSyntax.Func
+cSVCallbackProp1 fields = [cfun|
+  void cbp1(void* field, typename size_t size, void* data) {
+    typename statet* st = (typename statet*) data;
+    if (st->errmsg != 0) {
+      int fn = st->x++;
+      char* errmsg = 0;
+      int r = parse_int((char*)field, &errmsg);
+      if(errmsg != 0) {
+        st->errmsg = errmsg;
+      }
+      switch(fn) {
+        $stms:cases
+      }
+    }
+  } |]
+  where cases = [[cstm| case $int:fn': return $exp:ffun; |] | (fn', ffun) <- fields]
+
+parseInt :: CSyntax.Func
+parseInt = [cfun|
+  int parse_int(const char* str, char** errmsg) {
+    char *endptr;
+    errno = 0;
+    long l = strtol(str, &endptr, 0);
+    if (errno == ERANGE) {
+      *errmsg = "Integer out of range";
+      return 0;
+    }
+    if (*endptr != '\0' || str == endptr) {
+      *errmsg = "Invalid field: expected integer";
+      return 0;
+    }
+  
+    if (l < INT_MIN || l > INT_MAX) {
+      *errmsg = "Integer out of range";
+      return 0;
+    }
+  
+    return (int) l;
+  } |]
+
+cSVCallback2 :: CSyntax.Func
+cSVCallback2 = [cfun|
+  void cb2(int c, void* data) {
+    ((int*) data)[0] = 0;
+    ((int*) data)[1]++;
+  } |]
+
+cSVCountState :: CSyntax.InitGroup
+cSVCountState = [cdecl|
+  int c[3] = {0, 0, 1}; |]
+
+cSVProcessType :: CSyntax.Type
+cSVProcessType = [cty|struct statet { int i; int j; char* errmsg; }|]
+
+cSVProcessState :: CSyntax.InitGroup
+cSVProcessState = [cdecl|
+  typename statet c = {0, 0, 0}; |]
+
+readCSV :: CSyntax.Func
+readCSV = [cfun|
+  int read_csv(unsigned char sep, void* data,
+               void (*cb1)(void *, typename size_t, void *),
+               void (*cb2)(int, void *),
+               typename FILE* x) {
+    struct csv_parser p;
+    char buf[1024];
+    typename size_t bytes_read;
+
+    csv_init(&p, CSV_STRICT);
+    csv_set_delim(&p, sep);
+    while ((bytes_read=fread(buf, 1, 1024, x)) > 0) {
+      if (csv_parse(&p, buf, bytes_read, cb1, cb2, data) != bytes_read) {
+        fprintf(stderr, "Error while parsing file: %s\n", csv_strerror(csv_error(&p)));
+      }
+    }
+    csv_fini(&p, cb1, cb2, data);
+    return 0;
+  } |]
+
+readCSVCount :: CSyntax.Func
+readCSVCount = [cfun|
+  int main() {
+    typename FILE* x = fopen("test.csv", "r");
+    $decl:cSVCountState ;
+    read_csv('\t', &c,
+                      cb1,
+                      cb2,
+                      x);
+    printf("c[0] = %d, c[1] = %d\n", c[0], c[1]);
+    return 0;
+  } |]
+
+readCSVProcess :: CSyntax.Func
+readCSVProcess = [cfun|
+  int main() {
+    typename FILE* x = fopen("test.csv", "r");
+    $decl:cSVCountState ;
+    read_csv('\t', &c,
+                      cb1,
+                      cb2,
+                      x);
+    printf("c.x = %d, c.y = %d, c.errmsg = %s\n", c.x, c.y, c.errmsg);
+    return 0;
+  } |]
+
+mainReadCSV :: [CSyntax.Definition]
+mainReadCSV = [cunit|
+  $edecls:(includes ["csv.h"])
+  $func:cSVCallback1
+  $func:cSVCallback2
+  $func:readCSV
+  $func:readCSVCount
+  |]
 
 
