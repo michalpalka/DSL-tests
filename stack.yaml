@@ -10,7 +10,7 @@ packages:
 # (e.g., acme-missiles-0.3)
 extra-deps:
 - git: https://github.com/solrun/QHaskell.git
-  commit: 7b942f0ec82b1076aab8d4c025dee0b730881bb7
+  commit: c91bba44d98e6edec78568adda213e0f1f8caf37
 - generic-deriving-1.12.1
 - hashable-1.2.7.0
 - mtl-2.2.2
