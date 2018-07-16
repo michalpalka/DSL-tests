@@ -3,7 +3,7 @@ module DSLD where
 
 import Data.List (find)
 import Data.Word
-import Data.Monoid
+import Data.Monoid -- ((<>))
 
 import Language.Haskell.TH.Syntax (Q)
 import qualified Language.Haskell.TH.Syntax (TExp)
@@ -269,5 +269,3 @@ myMaybe = [|| \d f m -> case m of Nothing -> d; Just x -> f x ||]
 test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1 :: Word32) else Nothing) ||]
 -- *** Exception: Lft "Scope Error: cannot find 'find'"
 test5 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then (find (\x -> x < 2) [2, 1::Word32]) else Nothing) ||]
-
-
