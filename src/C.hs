@@ -92,6 +92,7 @@ cSVCallbackProp1 fields = [cfun|
         st->errmsg = errmsg;
       }
       switch(fn) {
+      // FIXME: Need to take result from here and do something with it
         $stms:cases
       }
     }
