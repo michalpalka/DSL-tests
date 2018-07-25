@@ -82,7 +82,10 @@ cSVCallback2 = [cfun|
 -- of the property block is called "x1"
 cSVCallbackProp1 :: [(Int, CSyntax.Stm)] -> CSyntax.Func
 cSVCallbackProp1 fields = [cfun|
-  void cbp1(void* field, typename size_t size, void* data) {
+  // FIXME: should this function be void
+  // when the stms in fields have return values
+  // (which they will if genrated with tExpToC) ?
+  void cb1(void* field, typename size_t size, void* data) {
     struct statet* st = (struct statet*) data;
     if (st->errmsg != 0) {
       int fn = st->i++;
@@ -112,12 +115,12 @@ parseInt = [cfun|
       *errmsg = "Invalid field: expected integer";
       return 0;
     }
-  
+
     if (l < INT_MIN || l > INT_MAX) {
       *errmsg = "Integer out of range";
       return 0;
     }
-  
+
     return (int) l;
   } |]
 
@@ -125,8 +128,8 @@ cSVCallbackProp2 :: CSyntax.Func
 cSVCallbackProp2 = [cfun|
   void cb2(int c, void* data) {
     struct statet* st = (struct statet*) data;
-    statet->i= 0;
-    statet->j++;
+    st->i= 0;
+    st->j++;
   } |]
 
 cSVCountState :: CSyntax.InitGroup
@@ -138,7 +141,7 @@ cSVProcessType = [cty|struct statet { int i; int j; char* errmsg; }|]
 
 cSVProcessState :: CSyntax.InitGroup
 cSVProcessState = [cdecl|
-  typename statet c = {0, 0, 0}; |]
+  struct statet c = {0, 0, 0}; |]
 
 readCSV :: CSyntax.Func
 readCSV = [cfun|
@@ -178,12 +181,12 @@ readCSVProcess :: CSyntax.Func
 readCSVProcess = [cfun|
   int main() {
     typename FILE* x = fopen("test.csv", "r");
-    $decl:cSVCountState ;
+    $decl:cSVProcessState ;
     read_csv('\t', &c,
                       cb1,
                       cb2,
                       x);
-    printf("c.x = %d, c.y = %d, c.errmsg = %s\n", c.x, c.y, c.errmsg);
+    printf("c.i = %d, c.j = %d, c.errmsg = %s\n", c.i, c.j, c.errmsg);
     return 0;
   } |]
 
