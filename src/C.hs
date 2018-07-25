@@ -82,12 +82,9 @@ cSVCallback2 = [cfun|
 -- of the property block is called "x1"
 cSVCallbackProp1 :: [(Int, CSyntax.Stm)] -> CSyntax.Func
 cSVCallbackProp1 fields = [cfun|
-  // FIXME: should this function be void
-  // when the stms in fields have return values
-  // (which they will if genrated with tExpToC) ?
   void cb1(void* field, typename size_t size, void* data) {
     struct statet* st = (struct statet*) data;
-    if (st->errmsg != 0) {
+    if (st->errmsg == 0) {
       int fn = st->i++;
       char* errmsg = 0;
       int x1 = parse_int((char*)field, &errmsg);
