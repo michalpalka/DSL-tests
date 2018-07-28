@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds, ViewPatterns #-}
 module C where
 
 import Data.Word
@@ -56,11 +56,14 @@ tExpToC (Lam v1 targ tres t1) =
   [cfun| $ty:(fromTType tres) f($ty:(fromTType targ) $id:v1)
             { $decls:decls $stms:stms return $exp:e; } |]
 
-tExpToCBlock :: TExp -> CSyntax.Stm
-tExpToCBlock (Lam v1 targ tres t1) =
+-- Assign the computation result to a variable with the given name
+tExpToCBlock :: String -> TExp -> CSyntax.Stm
+tExpToCBlock n (Lam v1 targ tres t1) =
   let (e, decls, stms) = runNameMonad $ tExpToC' t1 in
-  [cstm| { $decls:decls $stms:stms return $exp:e; } |]
+  [cstm| { $decls:decls $stms:stms $id:n = $exp:e; } |]
 
+tExpToCSVProp :: TExp -> CSyntax.Stm
+tExpToCSVProp = tExpToCBlock "st->prop"
 -- Create a list of includes
 includes :: [String] -> [CSyntax.Definition]
 includes is = [ [cedecl| $esc:("#include <" ++ i ++ ">") |] | i <- is ]
@@ -92,7 +95,6 @@ cSVCallbackProp1 fields = [cfun|
         st->errmsg = errmsg;
       }
       switch(fn) {
-      // FIXME: Need to take result from here and do something with it
         $stms:cases
       }
     }
@@ -135,11 +137,11 @@ cSVCountState = [cdecl|
   int c[3] = {0, 0, 1}; |]
 
 cSVProcessType :: CSyntax.Type
-cSVProcessType = [cty|struct statet { int i; int j; char* errmsg; }|]
+cSVProcessType = [cty|struct statet { int i; int j; int prop; char* errmsg; }|]
 
 cSVProcessState :: CSyntax.InitGroup
 cSVProcessState = [cdecl|
-  struct statet c = {0, 0, 0}; |]
+  struct statet c = {0, 0, 0, 0}; |]
 
 readCSV :: CSyntax.Func
 readCSV = [cfun|
@@ -184,7 +186,7 @@ readCSVProcess = [cfun|
                       cb1,
                       cb2,
                       x);
-    printf("c.i = %d, c.j = %d, c.errmsg = %s\n", c.i, c.j, c.errmsg);
+    printf("c.i = %d, c.j = %d, c.prop = %d, c.errmsg = %s\n", c.i, c.j, c.prop, c.errmsg);
     return 0;
   } |]
 
