@@ -235,10 +235,10 @@ toBackEnd l = case l of
 
 toTExp :: Mapping -> (Maybe String -> Bool) -> TExp
 toTExp (Mapping l def) f =
-  runExample [|| \x -> $$(mainBody l Nothing) x ||]
+  runExample [|| \x -> $$(mainBody l def) x ||]
   where
   f' = propify f
-  mainBody []               Nothing = [|| \x -> $$(f' Nothing) ||]
+  mainBody []               def = [|| \x -> $$(f' def) ||]
   mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f' $ Just lab) else $$(mainBody xs md) x ||]
     where
       conds [c]    = [|| \x -> x `intEq` c ||]

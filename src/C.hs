@@ -57,13 +57,14 @@ tExpToC (Lam v1 targ tres t1) =
             { $decls:decls $stms:stms return $exp:e; } |]
 
 -- Assign the computation result to a variable with the given name
-tExpToCBlock :: String -> TExp -> CSyntax.Stm
-tExpToCBlock n (Lam v1 targ tres t1) =
+-- Assign 1 to a check variable to show that the computation occurred
+tExpToCBlock :: String -> String -> TExp -> CSyntax.Stm
+tExpToCBlock n c (Lam v1 targ tres t1) =
   let (e, decls, stms) = runNameMonad $ tExpToC' t1 in
-  [cstm| { $decls:decls $stms:stms $id:n = $exp:e; } |]
+  [cstm| { $decls:decls $stms:stms $id:n = $exp:e; $id:c = 1;} |]
 
 tExpToCSVProp :: TExp -> CSyntax.Stm
-tExpToCSVProp = tExpToCBlock "st->prop"
+tExpToCSVProp = tExpToCBlock "st->prop" "st->check"
 
 -- Create a list of includes
 includes :: [String] -> [CSyntax.Definition]
@@ -98,11 +99,14 @@ cSVCallbackProp1 fields = [cfun|
       switch(fn) {
         $stms:cases
       }
-      if(st->prop == 0){
-        st->failcount++;
-        if (st->firstfail < 0){
-          st->firstfail = st->j + 1;
+      if(st->check == 1){
+        if(st->prop == 0){
+          st->failcount++;
+          if (st->firstfail < 0){
+            st->firstfail = st->j + 1;
+          }
         }
+        st->check = 0;
       }
     }
   } |]
@@ -144,11 +148,11 @@ cSVCountState = [cdecl|
   int c[3] = {0, 0, 1}; |]
 
 cSVProcessType :: CSyntax.Type
-cSVProcessType = [cty|struct statet { int i; int j; int prop; int failcount; int firstfail; char* errmsg; }|]
+cSVProcessType = [cty|struct statet { int i; int j; int prop; int failcount; int firstfail; int check; char* errmsg; }|]
 
 cSVProcessState :: CSyntax.InitGroup
 cSVProcessState = [cdecl|
-  struct statet c = {0, 0, -1, 0, -1, 0}; |]
+  struct statet c = {0, 0, -1, 0, -1, 0, 0}; |]
 
 readCSV :: CSyntax.Func
 readCSV = [cfun|
@@ -218,10 +222,10 @@ readCSVProp = [cfun|
     if(c.errmsg != 0){
       printf("Error: %s\n", c.errmsg);
     }
-    if(c.prop == 0){
+    if(c.failcount > 0){
       printf("Property does not hold!\n Property is untrue for %d lines out of %d.\n The first line where the property doesn't hold is line %d.\n", c.failcount, c.j, c.firstfail);
     }
-    if(c.prop == 1){
+    if(c.failcount == 0){
       printf("Tested property holds for all %d lines!\n", c.j);
     }
     return 0;
