@@ -64,6 +64,7 @@ tExpToCBlock n (Lam v1 targ tres t1) =
 
 tExpToCSVProp :: TExp -> CSyntax.Stm
 tExpToCSVProp = tExpToCBlock "st->prop"
+
 -- Create a list of includes
 includes :: [String] -> [CSyntax.Definition]
 includes is = [ [cedecl| $esc:("#include <" ++ i ++ ">") |] | i <- is ]
@@ -96,6 +97,12 @@ cSVCallbackProp1 fields = [cfun|
       }
       switch(fn) {
         $stms:cases
+      }
+      if(st->prop == 0){
+        st->failcount++;
+        if (st->firstfail < 0){
+          st->firstfail = st->j + 1;
+        }
       }
     }
   } |]
@@ -137,11 +144,11 @@ cSVCountState = [cdecl|
   int c[3] = {0, 0, 1}; |]
 
 cSVProcessType :: CSyntax.Type
-cSVProcessType = [cty|struct statet { int i; int j; int prop; char* errmsg; }|]
+cSVProcessType = [cty|struct statet { int i; int j; int prop; int failcount; int firstfail; char* errmsg; }|]
 
 cSVProcessState :: CSyntax.InitGroup
 cSVProcessState = [cdecl|
-  struct statet c = {0, 0, 0, 0}; |]
+  struct statet c = {0, 0, -1, 0, -1, 0}; |]
 
 readCSV :: CSyntax.Func
 readCSV = [cfun|
@@ -190,6 +197,36 @@ readCSVProcess = [cfun|
     return 0;
   } |]
 
+readCSVProp :: CSyntax.Func
+readCSVProp = [cfun|
+  int main(int argc, char *argv[]) {
+    typename FILE* x;
+    if (argc > 1) {
+      x = fopen(argv[1], "r");
+      if (!x) {
+        printf("Failed to open %s\n", argv[1]);
+      }
+    }
+    else {
+      x = fopen("test.csv", "r");
+    }
+    $decl:cSVProcessState ;
+    read_csv('\t', &c,
+                      cb1,
+                      cb2,
+                      x);
+    if(c.errmsg != 0){
+      printf("Error: %s\n", c.errmsg);
+    }
+    if(c.prop == 0){
+      printf("Property does not hold!\n Property is untrue for %d lines out of %d.\n The first line where the property doesn't hold is line %d.\n", c.failcount, c.j, c.firstfail);
+    }
+    if(c.prop == 1){
+      printf("Tested property holds for all %d lines!\n", c.j);
+    }
+    return 0;
+  } |]
+
 -- The generated code requires the libcsv library
 -- https://github.com/rgamble/libcsv
 mainReadCSV :: [CSyntax.Definition]
@@ -204,13 +241,13 @@ mainReadCSV = [cunit|
 
 mainReadCSVProp :: [(Int, CSyntax.Stm)] -> [CSyntax.Definition]
 mainReadCSVProp l = [cunit|
-  $edecls:(includes ["errno.h", "limits.h", "csv.h"])
+  $edecls:(includes ["errno.h", "limits.h", "csv.h", "stdio.h"])
   $ty:cSVProcessType;
   $func:parseInt
   $func:(cSVCallbackProp1 l)
   $func:cSVCallbackProp2
   $func:readCSV
-  $func:readCSVProcess
+  $func:readCSVProp
   |]
 
 
