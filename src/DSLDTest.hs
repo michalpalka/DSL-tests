@@ -49,4 +49,4 @@ genMain = do
 
 genMainProp = do
   withFile "test3.c" WriteMode $ \h -> do
-    hPutDocLn h $ ppr $ mainReadCSVProp [(1, tExpToCBlock test1)]
+    hPutDocLn h $ ppr $ mainReadCSVProp [(0, tExpToCBlock "res" test1)] ["col1"]
