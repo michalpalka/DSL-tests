@@ -58,13 +58,4 @@ genMain = do
 
 genMainProp = do
   withFile "test3.c" WriteMode $ \h -> do
-    hPutDocLn h $ ppr $ mainReadCSVProp [(1, tExpToCSVProp test1)]
-
-toCSVProp :: (Mapping, Maybe String -> Bool) -> CSyntax.Stm
-toCSVProp (m,p) = tExpToCSVProp $ toTExp m p
-
-checkProps filename fields = do
-  withFile filename WriteMode $ \h -> do
-    hPutDocLn h $ ppr $ mainReadCSVProp fields
-
-checkIProp = checkProps "itest.c" [(2, toCSVProp (incomeMapQ, prop2))]
+    hPutDocLn h $ ppr $ mainReadCSVProp [(0, tExpToCBlock "res" test1)] ["col1"]
