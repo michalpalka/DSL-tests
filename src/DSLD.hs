@@ -164,8 +164,8 @@ instance Pretty TExp where
   pprPrec n (TVar l)        = text l
   pprPrec n (Lam x _ _ t)       = parensIf (n > 0) $ nest 2 $
     text "\\" <> text x <+> text "->" <+> pprPrec 0 t
-  pprPrec n (Let x _ t1 t2)   =
-    text "let" <+> text x <+> equals <+> pprPrec 0 t1 <> line <>
+  pprPrec n (Let x _ t1 t2)   = align $
+    text "let" <+> text x <+> equals <+> align (pprPrec 0 t1) <> line <>
       text "in" <+> pprPrec 0 t2
   pprPrec n (TCnd _ t1 t2 t3) = group $
     text "if" <+> pprPrec 0 t1 <+/>
