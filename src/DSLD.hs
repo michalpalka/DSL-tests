@@ -21,6 +21,8 @@ import NameMonad
 import Language.C.Quote.C
 
 
+type Quoted a = Q (Language.Haskell.TH.Syntax.TExp a)
+
 plus :: Float -> Float -> Float
 plus = (+)
 
@@ -244,7 +246,7 @@ toTExp (Mapping l def) f =
       conds [c]    = [|| \x -> x `intEq` c ||]
       conds (c:cs) = [|| \x -> (x `intEq` c) || ($$(conds cs) x) ||]
 
-propify :: (Maybe String -> Bool) -> Maybe String -> Q (Language.Haskell.TH.Syntax.TExp Word32)
+propify :: (Maybe String -> Bool) -> Maybe String -> Quoted Word32
 propify f x = [|| $$(g $ f x) ||]
   where
   g True  = [|| 1 ||]
