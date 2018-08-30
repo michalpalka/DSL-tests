@@ -20,7 +20,8 @@ library
       QHaskell,
       language-c-quote >= 0.8,
       mainland-pretty  >= 0.6,
-      template-haskell >= 2.10
+      template-haskell >= 2.10,
+      srcloc >= 0.5
 
   exposed-modules:
       Test1, DSLD, DSLDTest, C
