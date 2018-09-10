@@ -10,6 +10,8 @@ import qualified Language.C.Syntax as CSyntax
 import Text.PrettyPrint.Mainland
 import Text.PrettyPrint.Mainland.Class
 
+import System.IO
+
 import NameMonad
 import DSLD
 
@@ -107,7 +109,7 @@ cSVCallback2 = [cfun|
 
 -- We adhere to the convention that the free variable
 -- of the property block is called "x1"
-cSVCallbackProp1 :: [(Int, CSyntax.Stm)] -> CSyntax.Func
+cSVCallbackProp1 :: [CSyntax.Stm] -> CSyntax.Func
 cSVCallbackProp1 fields = [cfun|
   void cbp1(void* field, typename size_t size, void* data) {
     struct statet* st = (struct statet*) data;
@@ -153,7 +155,7 @@ cSVCallbackProp1 fields = [cfun|
       }
     }
   } |]
-  where cases = [[cstm| case $int:fn': $stm:ffun |] | (fn', ffun) <- fields] ++ [[cstm| case -1: break;|]]
+  where cases = [[cstm| case $int:fn': $stm:ffun |] | (fn', ffun) <- zip [0..] fields] ++ [[cstm| case -1: break;|]]
 
 -- Useful messages:
 -- * mention the row, column and cell that fails the property
@@ -385,16 +387,19 @@ mainReadCSV = [cunit|
   |]
 
 
-mainReadCSVProp :: [(Int, CSyntax.Stm)] -> [String] -> [CSyntax.Definition]
-mainReadCSVProp l l2 = [cunit|
+mainReadCSVProp :: [(String, CSyntax.Stm)] -> [CSyntax.Definition]
+mainReadCSVProp l = [cunit|
   $edecls:(includes ["string.h", "errno.h", "limits.h", "csv.h"])
   $ty:cSVPropType;
   $func:parseAllocField
   $func:parseInt
-  $func:(cSVCallbackProp1 l)
+  $func:(cSVCallbackProp1 $ map snd l)
   $func:cSVCallbackProp2
   $func:readCSV
-  $func:(readCSVProp l2)
+  $func:(readCSVProp $ map fst l)
   |]
 
 
+genProp file props = do
+  withFile file WriteMode $ \h -> do
+    hPutDocLn h $ ppr $ mainReadCSVProp [ (col, tExpToCBlock "res" p) | (col, p) <- props]

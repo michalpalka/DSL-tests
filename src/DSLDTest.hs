@@ -56,6 +56,6 @@ genMain = do
   withFile "test2.c" WriteMode $ \h -> do
     hPutDocLn h $ ppr mainReadCSV
 
-genMainProp = do
-  withFile "test3.c" WriteMode $ \h -> do
-    hPutDocLn h $ ppr $ mainReadCSVProp [(0, tExpToCBlock "res" test1)] ["col1"]
+genMainProp = genProp "test3.c" [("col1", test1)]
+
+
