@@ -1,9 +1,12 @@
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds #-}
+{-# LANGUAGE TemplateHaskell, QuasiQuotes, GADTs, DataKinds, FlexibleContexts, PatternSynonyms, PolyKinds, OverloadedStrings #-}
 module DSLD where
 
-import Data.List (find)
+import Control.Monad (forM_)
+
+import Data.List (find, intercalate)
 import Data.Word
 import Data.Monoid -- ((<>))
+import Data.String (fromString)
 
 import Language.Haskell.TH.Syntax (Q)
 import qualified Language.Haskell.TH.Syntax (TExp)
@@ -15,6 +18,13 @@ import QHaskell.Type.GADT (Typ(Wrd, Flt, Bol))
 
 import Text.PrettyPrint.Mainland
 import Text.PrettyPrint.Mainland.Class
+
+import Data.Aeson hiding (object)
+import Data.Aeson.Encode.Pretty
+import Data.HashMap.Lazy (fromList)
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as BLC
+import qualified Data.Vector as V
 
 import NameMonad
 
@@ -56,11 +66,11 @@ data LFieldT = LFT [(String, AtomT)]
   deriving (Eq, Show)
 
 -- Mapping between a physical field and a logical field
--- The first component defines the special values.
+-- The first component of the Enum and Ranges contstructors defines the special values.
 -- The second component defines whether any other value is legal.
--- If the second components is Just s, a value that is not special
+-- If the Maybe String components is Just s, a value that is not special
 -- becomes labelled with s.
-data Mapping = Mapping [([Word32], String)] (Maybe String)
+data Mapping = Id | Enum [([Int], String)] (Maybe String) | Ranges [((Int, Int), String)] (Maybe String)
   deriving (Eq, Show)
 
 -- not used yet (but should check if the concrete syntax
@@ -75,7 +85,7 @@ income :: LFieldT
 income = LFT [("NoData", FNone), ("IData", FFloat)]
 
 incomeMap :: Mapping
-incomeMap = Mapping [([-9, -8, -7, 0], "NoData")] (Just "IData")
+incomeMap = Enum [([-9, -8, -7, 0], "NoData")] (Just "IData")
 
 data Atom = FVInt Word32 | FVFloat Float | FVNone
   deriving (Eq, Show)
@@ -87,15 +97,15 @@ type MapFun = Atom -> Maybe LField
 
 -- Not used for code generations
 evalMapping :: Mapping -> MapFun
-evalMapping (Mapping l m) (FVInt i) =
-  case find (\(sp, _) -> i `elem` sp) l of
+evalMapping (Enum l m) (FVInt i) =
+  case find (\(sp, _) -> fromIntegral i `elem` sp) l of
     Just (_, lab) -> Just $ LF lab FVNone
     Nothing       ->
       case m of
         -- We have a catch-all clause
         Just lab -> Just $ LF lab (FVInt i)
         Nothing  -> Nothing -- Invalid data value
-evalMapping (Mapping _ m) (FVFloat f) =
+evalMapping (Enum _ m) (FVFloat f) =
   case m of
     -- We have a catch-all clause
     Just lab -> Just $ LF lab (FVFloat f)
@@ -104,18 +114,18 @@ evalMapping (Mapping _ m) (FVFloat f) =
 -- Reimplement evalMapping using low-level conditionals
 --
 
-(|->) :: [Word32] -> String -> ([Word32], String)
+(|->) :: [Int] -> String -> ([Int], String)
 patterns |-> result = (patterns, result)
 
 -- Values that are not covered by special cases
 -- are labeled with s
-defCase :: [([Word32], String)] -> String -> Mapping
-defCase l d = Mapping l (Just d)
+defCase :: [([Int], String)] -> String -> Mapping
+defCase l d = Enum l (Just d)
 
 -- Values that are not covered by special cases
 -- are illegal
-noDefCase :: [([Word32], String)] -> () -> Mapping
-noDefCase l d = Mapping l Nothing
+noDefCase :: [([Int], String)] -> () -> Mapping
+noDefCase l d = Enum l Nothing
 
 
 intEq :: Word32 -> Word32 -> Bool
@@ -236,15 +246,17 @@ toBackEnd l = case l of
   toBackEnd3 c m n p = c <$> toBackEnd m <*> toBackEnd n <*> toBackEnd p
 
 toTExp :: Mapping -> (Maybe String -> Bool) -> TExp
-toTExp (Mapping l def) f =
+toTExp (Enum l def) f =
   runExample [|| \x -> $$(mainBody l def) x ||]
   where
   f' = propify f
-  mainBody []               def = [|| \x -> $$(f' def) ||]
+  mainBody []                   def = [|| \x -> $$(f' def) ||]
   mainBody ((vals, lab):xs) md      = [|| \x -> if $$(conds vals) x then $$(f' $ Just lab) else $$(mainBody xs md) x ||]
     where
-      conds [c]    = [|| \x -> x `intEq` c ||]
-      conds (c:cs) = [|| \x -> (x `intEq` c) || ($$(conds cs) x) ||]
+      conds [c]    = [|| \x -> x `intEq` c' ||]
+        where c' = fromIntegral c
+      conds (c:cs) = [|| \x -> (x `intEq` c') || ($$(conds cs) x) ||]
+        where c' = fromIntegral c
 
 propify :: (Maybe String -> Bool) -> Maybe String -> Quoted Word32
 propify f x = [|| $$(g $ f x) ||]
@@ -266,7 +278,78 @@ myNorm ex =
 runExample ex =
   runNameMonad $ toBackEnd $ myNorm ex
 
+marginalTable file cols = (file, cols)
+
+microSampleTable file cols = (file, cols)
+
+ranges :: [([Int], String)] -> Mapping
+ranges l = Ranges [ ((r1, r2), s) | ([r1, r2], s) <- l] Nothing
+
+mappings :: [(String, String, Mapping)] -> [(String, String, Mapping)]
+mappings = id
+
+object l = Object $ fromList l
+str s    = String $ fromString s
+array l  = Array $ V.fromList l
+
+data SynPop = SynPop String Value
+
+doGenerate :: [SynPop] -> IO ()
+doGenerate l = do
+  forM_ (zip l [0..]) $ \(SynPop reg desc, n) -> do
+    BLC.writeFile ("task_" ++ show n ++ ".json") $ encodePretty desc
+
+generatePop :: String -> [(String, [String])] -> (String, [String]) -> [(String, String, Mapping)] -> [String] -> String -> SynPop
+generatePop reg marg (uFile, uCols) mappings synPopCols filename =
+  --BLC.writeFile descFile $ encodePretty $
+  SynPop reg $
+    object [("marginal_tables", array tabs),
+            ("marginal_region", str reg),
+            ("mappings", array maps),
+            ("micro_data", table uFile uCols),
+            -- Next thing: read it in the ipf script (the columns for now)
+            ("output", object [("file_name", str filename),
+                               ("columns", array [str s | s <- synPopCols])])]
+  where
+    tabs =
+      [ table tab cols
+      | (tab, cols) <- marg ]
+    maps =
+      [ object [("from", str from),
+                ("to", str to),
+                ("mapping", renderMapping m)]
+      | (from, to, m) <- mappings ]
+    renderMapping Id            = object [("type", str "id")]
+    renderMapping (Enum l mdef) =
+      object $ [("type", str "enum"),
+                ("enum", array
+                           [ object [("label", str label),
+                                     ("cases", array [ Number $ fromIntegral c | c <- cases])]
+                           | (cases, label) <- l])]
+                ++ def
+      where def = case mdef of
+              Nothing -> []
+              Just s  -> [("default", str s)]
+    renderMapping (Ranges l mdef) =
+      object $ [("type", str "ranges"),
+                ("ranges", array
+                            [ object [("label", str label),
+                                      ("range", object $
+                                        [("from", Number $ fromIntegral from),
+                                         ("to", Number $ fromIntegral to)])]
+                            | ((from, to), label) <- l])]
+                ++ def
+      where def = case mdef of
+              Nothing -> []
+              Just s  -> [("default", str s)]
+    table file cols =
+      object
+        [("table", str file),
+         ("columns", array [ str c | c <- cols ])]
+
 myMaybe = [|| \d f m -> case m of Nothing -> d; Just x -> f x ||]
 test4 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then Just (1 :: Word32) else Nothing) ||]
 -- *** Exception: Lft "Scope Error: cannot find 'find'"
 test5 = [|| \x -> $$myMaybe 5 (\y -> y) (if (x :: Word32) `intEq` 0 then (find (\x -> x < 2) [2, 1::Word32]) else Nothing) ||]
+
+
